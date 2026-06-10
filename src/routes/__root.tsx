@@ -81,13 +81,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "Plataforma da Alfa Construtora para criar projetos arquitetônicos, calcular materiais e contar com IA especialista em engenharia civil.",
       },
       { name: "author", content: "Alfa Construtora" },
-      { property: "og:title", content: "Alfa Construtora — Engenharia + IA" },
+      { property: "og:title", content: "Alfa Construtora — Projetos, cálculos e IA para engenharia" },
       {
         property: "og:description",
         content: "Crie projetos, calcule materiais e use IA para arquitetura.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: "Alfa Construtora — Projetos, cálculos e IA para engenharia" },
+      { name: "description", content: "Alfa Construtora: Intelligent project planning and design for construction." },
+      { property: "og:description", content: "Alfa Construtora: Intelligent project planning and design for construction." },
+      { name: "twitter:description", content: "Alfa Construtora: Intelligent project planning and design for construction." },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
