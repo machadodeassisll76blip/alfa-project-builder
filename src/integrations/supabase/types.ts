@@ -14,7 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+          plan: Database["public"]["Enums"]["plan_tier"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id: string
+          plan?: Database["public"]["Enums"]["plan_tier"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          plan?: Database["public"]["Enums"]["plan_tier"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          created_at: string
+          data: Json
+          description: string | null
+          id: string
+          is_public_template: boolean
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json
+          description?: string | null
+          id?: string
+          is_public_template?: boolean
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          description?: string | null
+          id?: string
+          is_public_template?: boolean
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +79,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      plan_tier: "prata" | "bronze" | "ouro" | "titanium"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +206,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      plan_tier: ["prata", "bronze", "ouro", "titanium"],
+    },
   },
 } as const
