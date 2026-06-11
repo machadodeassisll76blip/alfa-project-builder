@@ -287,6 +287,15 @@ function LandingPage() {
             <Link to="/auth" className="hover:text-foreground">
               Entrar
             </Link>
+            <a
+              href="https://www.linkedin.com/company/alfa-construtora"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 hover:text-foreground"
+              aria-label="LinkedIn da Alfa Construtora"
+            >
+              <Linkedin className="h-4 w-4" /> LinkedIn
+            </a>
           </div>
         </div>
       </footer>
