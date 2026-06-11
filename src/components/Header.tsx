@@ -1,9 +1,11 @@
 import { Link, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "./Logo";
 import { Button } from "@/components/ui/button";
-import { LogOut, LayoutDashboard, FolderKanban, Sparkles, Layers } from "lucide-react";
+import { LogOut, LayoutDashboard, FolderKanban, Sparkles, Layers, Shield } from "lucide-react";
+import { amIAdmin } from "@/lib/admin.functions";
 
 export function Header() {
   const router = useRouter();
