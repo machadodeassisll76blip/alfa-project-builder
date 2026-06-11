@@ -78,6 +78,15 @@ export function Header() {
                 <LayoutDashboard className="mr-1 inline h-4 w-4" />
                 Editor
               </Link>
+              {isAdmin && (
+                <Link
+                  to="/admin"
+                  className="rounded-md px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10"
+                >
+                  <Shield className="mr-1 inline h-4 w-4" />
+                  Admin
+                </Link>
+              )}
             </>
           )}
         </nav>
