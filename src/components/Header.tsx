@@ -10,12 +10,27 @@ import { amIAdmin } from "@/lib/admin.functions";
 export function Header() {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const checkAdmin = useServerFn(amIAdmin);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setEmail(data.session?.user.email ?? null));
+    const refresh = async (session: { user: { email?: string | null } } | null) => {
+      setEmail(session?.user.email ?? null);
+      if (session?.user) {
+        try {
+          const { isAdmin: ok } = await checkAdmin();
+          setIsAdmin(ok);
+        } catch {
+          setIsAdmin(false);
+        }
+      } else {
+        setIsAdmin(false);
+      }
+    };
+    supabase.auth.getSession().then(({ data }) => refresh(data.session));
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
-      setEmail(session?.user.email ?? null);
+      refresh(session);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
