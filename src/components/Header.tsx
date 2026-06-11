@@ -1,19 +1,36 @@
 import { Link, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "./Logo";
 import { Button } from "@/components/ui/button";
-import { LogOut, LayoutDashboard, FolderKanban, Sparkles, Layers } from "lucide-react";
+import { LogOut, LayoutDashboard, FolderKanban, Sparkles, Layers, Shield } from "lucide-react";
+import { amIAdmin } from "@/lib/admin.functions";
 
 export function Header() {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const checkAdmin = useServerFn(amIAdmin);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setEmail(data.session?.user.email ?? null));
+    const refresh = async (session: { user: { email?: string | null } } | null) => {
+      setEmail(session?.user.email ?? null);
+      if (session?.user) {
+        try {
+          const { isAdmin: ok } = await checkAdmin();
+          setIsAdmin(ok);
+        } catch {
+          setIsAdmin(false);
+        }
+      } else {
+        setIsAdmin(false);
+      }
+    };
+    supabase.auth.getSession().then(({ data }) => refresh(data.session));
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
-      setEmail(session?.user.email ?? null);
+      refresh(session);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
@@ -61,6 +78,15 @@ export function Header() {
                 <LayoutDashboard className="mr-1 inline h-4 w-4" />
                 Editor
               </Link>
+              {isAdmin && (
+                <Link
+                  to="/admin"
+                  className="rounded-md px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10"
+                >
+                  <Shield className="mr-1 inline h-4 w-4" />
+                  Admin
+                </Link>
+              )}
             </>
           )}
         </nav>
