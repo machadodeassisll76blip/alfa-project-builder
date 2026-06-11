@@ -1,4 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +16,7 @@ import {
   Box,
   Share2,
   Check,
+  Linkedin,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -31,6 +34,20 @@ export const Route = createFileRoute("/")({
 });
 
 function LandingPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!cancelled && data.session) {
+        router.navigate({ to: "/projetos", replace: true });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -270,6 +287,15 @@ function LandingPage() {
             <Link to="/auth" className="hover:text-foreground">
               Entrar
             </Link>
+            <a
+              href="https://www.linkedin.com/company/alfa-construtora"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 hover:text-foreground"
+              aria-label="LinkedIn da Alfa Construtora"
+            >
+              <Linkedin className="h-4 w-4" /> LinkedIn
+            </a>
           </div>
         </div>
       </footer>

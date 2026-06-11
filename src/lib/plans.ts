@@ -16,7 +16,7 @@ export const PLANS: Plan[] = [
     id: "prata",
     name: "Prata",
     price: 15,
-    tagline: "Experimente o gostinho",
+    tagline: "Tenha a experiência primária de nossos planos da Alfa",
     description:
       "A porta de entrada — ideal para conhecer a ferramenta e brincar com esboços simples antes de assumir um projeto sério.",
     features: [
