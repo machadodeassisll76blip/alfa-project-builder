@@ -34,6 +34,20 @@ export const Route = createFileRoute("/")({
 });
 
 function LandingPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!cancelled && data.session) {
+        router.navigate({ to: "/projetos", replace: true });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
