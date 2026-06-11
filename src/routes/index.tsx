@@ -3,6 +3,7 @@ import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PLANS } from "@/lib/plans";
+import capaAlfa from "@/assets/alfa-construtora-capa.png.asset.json";
 import {
   ArrowRight,
   Sparkles,
@@ -124,6 +125,25 @@ function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* BRAND COVER */}
+      <section className="border-b bg-muted/30 py-12 sm:py-16">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <div className="overflow-hidden rounded-2xl border bg-card shadow-xl">
+            <img
+              src={capaAlfa.url}
+              alt="Capa oficial da Alfa Construtora — engenharia, projetos e construção"
+              className="h-auto w-full object-cover"
+              loading="lazy"
+            />
+          </div>
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            Conheça a Alfa Construtora também no Instagram.
+          </p>
+        </div>
+      </section>
+
+
 
       {/* FEATURES */}
       <section className="border-b py-20">
