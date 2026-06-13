@@ -7,17 +7,21 @@ import {
   Minus,
   Zap,
   Network,
-  Trash2,
+  Eraser,
   Eye,
   EyeOff,
   Grid3x3,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Hand,
 } from "lucide-react";
 import { planAllows, type PlanTier } from "@/lib/plans";
 
 export type Shape = {
   id: string;
   type: "wall" | "room" | "electric" | "network";
-  x1: number; // meters
+  x1: number;
   y1: number;
   x2: number;
   y2: number;
@@ -27,8 +31,8 @@ export type LayerKey = "base" | "electric" | "network";
 
 type Tool = "select" | "wall" | "room" | "electric" | "network" | "erase";
 
-const SCALE = 40; // pixels per meter at zoom 1
-const SNAP = 0.25; // meters
+const BASE_SCALE = 40; // pixels per meter at zoom 1
+const SNAP = 0.25;
 
 const LAYER_OF: Record<Shape["type"], LayerKey> = {
   wall: "base",
@@ -60,12 +64,15 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 560 });
   const [tool, setTool] = useState<Tool>("wall");
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 60, y: 40 }); // px offset for origin from top-left & bottom
   const [drag, setDrag] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const [panDrag, setPanDrag] = useState<{ sx: number; sy: number; px: number; py: number } | null>(null);
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
 
   const allowsLayers = planAllows.layers(plan);
+  const SCALE = BASE_SCALE * zoom;
 
-  // Resize
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -76,12 +83,12 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // World <-> screen. Origin (0,0) at bottom-left with margin.
-  const ORIGIN_X = 60;
-  const ORIGIN_Y_FROM_TOP = size.h - 40;
+  const ORIGIN_X = pan.x;
+  const ORIGIN_Y_FROM_TOP = size.h - pan.y;
+
   const toScreen = useCallback(
     (mx: number, my: number) => ({ x: ORIGIN_X + mx * SCALE, y: ORIGIN_Y_FROM_TOP - my * SCALE }),
-    [ORIGIN_Y_FROM_TOP],
+    [ORIGIN_X, ORIGIN_Y_FROM_TOP, SCALE],
   );
   const toWorld = useCallback(
     (sx: number, sy: number) => {
@@ -89,10 +96,9 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
       const my = (ORIGIN_Y_FROM_TOP - sy) / SCALE;
       return { x: Math.round(mx / SNAP) * SNAP, y: Math.round(my / SNAP) * SNAP };
     },
-    [ORIGIN_Y_FROM_TOP],
+    [ORIGIN_X, ORIGIN_Y_FROM_TOP, SCALE],
   );
 
-  // Draw
   useEffect(() => {
     const cvs = canvasRef.current;
     if (!cvs) return;
@@ -105,23 +111,24 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, size.w, size.h);
 
-    // Background
     ctx.fillStyle = "#F8FAFC";
     ctx.fillRect(0, 0, size.w, size.h);
 
-    // Grid (1m squares)
+    // Grid 1m
     ctx.strokeStyle = "#E2E8F0";
     ctx.lineWidth = 1;
-    const maxX = Math.ceil((size.w - ORIGIN_X) / SCALE);
-    const maxY = Math.ceil(ORIGIN_Y_FROM_TOP / SCALE);
-    for (let i = 0; i <= maxX; i++) {
+    const startMx = Math.floor(-ORIGIN_X / SCALE);
+    const endMx = Math.ceil((size.w - ORIGIN_X) / SCALE);
+    const startMy = Math.floor(-(size.h - ORIGIN_Y_FROM_TOP) / SCALE);
+    const endMy = Math.ceil(ORIGIN_Y_FROM_TOP / SCALE);
+    for (let i = startMx; i <= endMx; i++) {
       const x = ORIGIN_X + i * SCALE;
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, size.h);
       ctx.stroke();
     }
-    for (let j = 0; j <= maxY; j++) {
+    for (let j = startMy; j <= endMy; j++) {
       const y = ORIGIN_Y_FROM_TOP - j * SCALE;
       ctx.beginPath();
       ctx.moveTo(0, y);
@@ -139,14 +146,17 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
     ctx.lineTo(size.w, ORIGIN_Y_FROM_TOP);
     ctx.stroke();
 
-    // Axis labels
+    // Labels
     ctx.fillStyle = "#475569";
     ctx.font = "10px Inter, sans-serif";
-    for (let i = 0; i <= maxX; i += 2) {
+    const step = zoom < 0.6 ? 5 : zoom < 1.2 ? 2 : 1;
+    for (let i = startMx; i <= endMx; i += step) {
+      if (i === 0) continue;
       const x = ORIGIN_X + i * SCALE;
       ctx.fillText(`${i}m`, x + 2, ORIGIN_Y_FROM_TOP + 14);
     }
-    for (let j = 0; j <= maxY; j += 2) {
+    for (let j = startMy; j <= endMy; j += step) {
+      if (j === 0) continue;
       const y = ORIGIN_Y_FROM_TOP - j * SCALE;
       ctx.fillText(`${j}m`, 4, y - 2);
     }
@@ -180,11 +190,10 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
       }
     }
 
-    // Drag preview
     if (drag) {
       const p1 = toScreen(drag.x1, drag.y1);
       const p2 = toScreen(drag.x2, drag.y2);
-      const tt = (tool === "select" || tool === "erase") ? "wall" : (tool as Shape["type"]);
+      const tt = tool === "select" || tool === "erase" ? "wall" : (tool as Shape["type"]);
       ctx.strokeStyle = COLORS[tt];
       ctx.setLineDash([4, 4]);
       ctx.lineWidth = 2;
@@ -201,8 +210,15 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
       ctx.setLineDash([]);
     }
 
-    // Hover crosshair + coord
-    if (hover) {
+    if (hover && tool === "erase") {
+      const p = toScreen(hover.x, hover.y);
+      ctx.strokeStyle = "#EF4444";
+      ctx.fillStyle = "#EF444422";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 16, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    } else if (hover) {
       const p = toScreen(hover.x, hover.y);
       ctx.fillStyle = "#F97316";
       ctx.beginPath();
@@ -212,24 +228,46 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
       ctx.font = "11px JetBrains Mono, monospace";
       ctx.fillText(`(${hover.x.toFixed(2)}, ${hover.y.toFixed(2)}) m`, p.x + 8, p.y - 8);
     }
-  }, [size, value, drag, hover, toScreen, ORIGIN_Y_FROM_TOP, tool]);
+  }, [size, value, drag, hover, toScreen, ORIGIN_X, ORIGIN_Y_FROM_TOP, tool, zoom, SCALE]);
+
+  const eraseAt = (wx: number, wy: number) => {
+    const threshold = 0.4;
+    const remaining = value.shapes.filter((s) => {
+      const layer = LAYER_OF[s.type];
+      if (!value.visibleLayers[layer]) return true;
+      if (s.type === "room") {
+        const minX = Math.min(s.x1, s.x2);
+        const maxX = Math.max(s.x1, s.x2);
+        const minY = Math.min(s.y1, s.y2);
+        const maxY = Math.max(s.y1, s.y2);
+        const onEdge =
+          (wx >= minX - threshold && wx <= maxX + threshold &&
+            (Math.abs(wy - minY) < threshold || Math.abs(wy - maxY) < threshold)) ||
+          (wy >= minY - threshold && wy <= maxY + threshold &&
+            (Math.abs(wx - minX) < threshold || Math.abs(wx - maxX) < threshold));
+        return !onEdge;
+      }
+      const d = pointToSegmentDistance(wx, wy, s.x1, s.y1, s.x2, s.y2);
+      return d > threshold;
+    });
+    if (remaining.length !== value.shapes.length) {
+      onChange({ ...value, shapes: remaining });
+    }
+  };
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (tool === "select") return;
     const rect = canvasRef.current!.getBoundingClientRect();
-    const w = toWorld(e.clientX - rect.left, e.clientY - rect.top);
-    if (w.x < 0 || w.y < 0) return;
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    // Pan: middle/right button or select tool
+    if (e.button === 1 || e.button === 2 || tool === "select") {
+      setPanDrag({ sx, sy, px: pan.x, py: pan.y });
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      return;
+    }
+    const w = toWorld(sx, sy);
     if (tool === "erase") {
-      // Find closest shape and remove
-      const remaining = value.shapes.filter((s) => {
-        const layer = LAYER_OF[s.type];
-        if (!value.visibleLayers[layer]) return true;
-        const d = pointToSegmentDistance(w.x, w.y, s.x1, s.y1, s.x2, s.y2);
-        return d > 0.3;
-      });
-      if (remaining.length !== value.shapes.length) {
-        onChange({ ...value, shapes: remaining });
-      }
+      eraseAt(w.x, w.y);
       return;
     }
     setDrag({ x1: w.x, y1: w.y, x2: w.x, y2: w.y });
@@ -237,12 +275,26 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
 
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current!.getBoundingClientRect();
-    const w = toWorld(e.clientX - rect.left, e.clientY - rect.top);
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    if (panDrag) {
+      setPan({ x: panDrag.px + (sx - panDrag.sx), y: panDrag.py - (sy - panDrag.sy) });
+      return;
+    }
+    const w = toWorld(sx, sy);
     setHover(w);
+    if (tool === "erase" && e.buttons === 1) {
+      eraseAt(w.x, w.y);
+      return;
+    }
     if (drag) setDrag({ ...drag, x2: w.x, y2: w.y });
   };
 
   const onPointerUp = () => {
+    if (panDrag) {
+      setPanDrag(null);
+      return;
+    }
     if (!drag) return;
     if (tool !== "select" && tool !== "erase") {
       const dx = drag.x2 - drag.x1;
@@ -262,23 +314,55 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
     setDrag(null);
   };
 
+  // Native non-passive wheel listener so preventDefault works
+  useEffect(() => {
+    const cvs = canvasRef.current;
+    if (!cvs) return;
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = cvs.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      setZoom((prevZoom) => {
+        const newZoom = Math.max(0.3, Math.min(4, prevZoom * factor));
+        const curScale = BASE_SCALE * prevZoom;
+        setPan((prevPan) => {
+          const curOriginX = prevPan.x;
+          const curOriginYFromTop = size.h - prevPan.y;
+          const worldX = (sx - curOriginX) / curScale;
+          const worldY = (curOriginYFromTop - sy) / curScale;
+          const newScale = BASE_SCALE * newZoom;
+          const newOriginX = sx - worldX * newScale;
+          const newOriginYFromTop = sy + worldY * newScale;
+          return { x: newOriginX, y: size.h - newOriginYFromTop };
+        });
+        return newZoom;
+      });
+    };
+    cvs.addEventListener("wheel", handler, { passive: false });
+    return () => cvs.removeEventListener("wheel", handler);
+  }, [size.h]);
+
+
   const toggleLayer = (k: LayerKey) =>
     onChange({ ...value, visibleLayers: { ...value.visibleLayers, [k]: !value.visibleLayers[k] } });
 
-  const clearAll = () => {
-    if (confirm("Limpar todas as formas do projeto?")) {
-      onChange({ ...value, shapes: [] });
-    }
+  const resetView = () => {
+    setZoom(1);
+    setPan({ x: 60, y: 40 });
   };
 
   const tools: { id: Tool; label: string; icon: React.ReactNode; locked?: boolean }[] = [
-    { id: "select", label: "Mover", icon: <MousePointer2 className="h-4 w-4" /> },
+    { id: "select", label: "Mover", icon: <Hand className="h-4 w-4" /> },
     { id: "wall", label: "Parede", icon: <Minus className="h-4 w-4" /> },
     { id: "room", label: "Cômodo", icon: <Square className="h-4 w-4" /> },
     { id: "electric", label: "Elétrica", icon: <Zap className="h-4 w-4" />, locked: !allowsLayers },
     { id: "network", label: "Rede", icon: <Network className="h-4 w-4" />, locked: !allowsLayers },
-    { id: "erase", label: "Apagar", icon: <Trash2 className="h-4 w-4" /> },
+    { id: "erase", label: "Borracha", icon: <Eraser className="h-4 w-4" /> },
   ];
+
+  const cursor = tool === "select" || panDrag ? "grab" : tool === "erase" ? "crosshair" : "crosshair";
 
   return (
     <div className="flex h-full flex-col gap-2">
@@ -308,13 +392,7 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
         <div className="flex items-center gap-1">
           <span className="mr-1 text-xs font-medium text-muted-foreground">Camadas:</span>
           {(["base", "electric", "network"] as LayerKey[]).map((k) => (
-            <Button
-              key={k}
-              size="sm"
-              variant="ghost"
-              className="h-8"
-              onClick={() => toggleLayer(k)}
-            >
+            <Button key={k} size="sm" variant="ghost" className="h-8" onClick={() => toggleLayer(k)}>
               {value.visibleLayers[k] ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4 opacity-50" />}
               <span className="ml-1 text-xs">
                 {k === "base" ? "Estrutura" : k === "electric" ? "Elétrica" : "Rede"}
@@ -322,12 +400,20 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
             </Button>
           ))}
         </div>
-        <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Grid3x3 className="h-3.5 w-3.5" />
-          Grade 1m · snap {SNAP}m
-          <Button size="sm" variant="ghost" className="ml-2 h-8 text-destructive" onClick={clearAll}>
-            <Trash2 className="mr-1 h-3.5 w-3.5" /> Limpar
+        <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+          <Button size="sm" variant="ghost" className="h-8" onClick={() => setZoom((z) => Math.max(0.3, z / 1.2))} title="Diminuir zoom">
+            <ZoomOut className="h-4 w-4" />
           </Button>
+          <span className="w-12 text-center font-mono text-xs">{Math.round(zoom * 100)}%</span>
+          <Button size="sm" variant="ghost" className="h-8" onClick={() => setZoom((z) => Math.min(4, z * 1.2))} title="Aumentar zoom">
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8" onClick={resetView} title="Resetar vista">
+            <Maximize2 className="h-4 w-4" />
+          </Button>
+          <div className="ml-2 hidden items-center gap-1 sm:flex">
+            <Grid3x3 className="h-3.5 w-3.5" /> 1m · snap {SNAP}m
+          </div>
         </div>
       </div>
 
@@ -340,9 +426,15 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
           onPointerLeave={() => {
             setHover(null);
             setDrag(null);
+            setPanDrag(null);
           }}
-          className="block cursor-crosshair touch-none"
+          onContextMenu={(e) => e.preventDefault()}
+          className="block touch-none"
+          style={{ cursor }}
         />
+        <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-background/80 px-2 py-1 text-[10px] text-muted-foreground backdrop-blur">
+          Scroll = zoom · Arraste com Mover/botão direito = pan
+        </div>
       </div>
     </div>
   );
@@ -358,7 +450,6 @@ function pointToSegmentDistance(px: number, py: number, x1: number, y1: number, 
   return Math.hypot(px - cx, py - cy);
 }
 
-// Material estimation helpers
 export function computeMetrics(shapes: Shape[]) {
   let wallLength = 0;
   let roomArea = 0;
@@ -377,14 +468,13 @@ export function computeMetrics(shapes: Shape[]) {
       roomPerimeter += 2 * (w + h);
     }
   }
-  const totalWall = wallLength + roomPerimeter; // m
-  // Standard assumptions: parede 2.8m altura, 39 tijolos/m², cimento 0.5 sacos/m² alvenaria
+  const totalWall = wallLength + roomPerimeter;
   const wallAreaM2 = totalWall * 2.8;
   const bricks = Math.ceil(wallAreaM2 * 39);
   const cementBags = Math.ceil(wallAreaM2 * 0.5);
   const sandM3 = +(wallAreaM2 * 0.07).toFixed(2);
   const floorArea = roomArea;
-  const tiles = Math.ceil(floorArea * 1.1); // 10% perda
+  const tiles = Math.ceil(floorArea * 1.1);
   return {
     wallLength: +totalWall.toFixed(2),
     roomArea: +roomArea.toFixed(2),
