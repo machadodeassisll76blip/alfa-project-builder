@@ -28,8 +28,7 @@ export const amIAdmin = createServerFn({ method: "GET" })
   });
 
 /**
- * Permite que o primeiro usuário cadastrado se torne admin,
- * caso ainda não exista nenhum admin no sistema (bootstrap).
+ * Primeiro usuário cadastrado vira admin (bootstrap) e ganha plano Titanium automaticamente.
  */
 export const claimFirstAdmin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -45,6 +44,11 @@ export const claimFirstAdmin = createServerFn({ method: "POST" })
       .from("user_roles")
       .insert({ user_id: context.userId, role: "admin" });
     if (error) throw new Error(error.message);
+    // Admin ganha plano Titanium automaticamente (tudo liberado)
+    await supabaseAdmin
+      .from("profiles")
+      .update({ plan: "titanium" })
+      .eq("id", context.userId);
     return { ok: true };
   });
 
@@ -61,7 +65,7 @@ export const getAdminStats = createServerFn({ method: "GET" })
         .from("projects")
         .select("id", { count: "exact", head: true })
         .eq("is_public_template", true),
-      supabaseAdmin.from("profiles").select("plan"),
+      supabaseAdmin.from("profiles").select("plan, created_at"),
       supabaseAdmin
         .from("projects")
         .select("id, name, user_id, is_public_template, updated_at")
@@ -74,13 +78,44 @@ export const getAdminStats = createServerFn({ method: "GET" })
       planCounts[p.plan] = (planCounts[p.plan] ?? 0) + 1;
     });
 
+    // Vendas mensais (últimos 6 meses) — agrupa por mês a partir de profiles.created_at + plano atual
+    const now = new Date();
+    const months: { key: string; label: string }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({
+        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+        label: d.toLocaleDateString("pt-BR", { month: "short" }),
+      });
+    }
+    const PRICES: Record<string, number> = { prata: 15, bronze: 34, ouro: 68, titanium: 204 };
+    const monthly = months.map((m) => {
+      const matching = (plansRes.data ?? []).filter((p: { created_at: string }) => {
+        const dt = new Date(p.created_at);
+        const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+        return key === m.key;
+      });
+      const revenue = matching.reduce(
+        (acc, p: { plan: string }) => acc + (PRICES[p.plan] ?? 0),
+        0,
+      );
+      return { month: m.label, signups: matching.length, revenue };
+    });
+
+    const totalMRR = (plansRes.data ?? []).reduce(
+      (acc, p: { plan: string }) => acc + (PRICES[p.plan] ?? 0),
+      0,
+    );
+
     return {
       totals: {
         users: usersRes.count ?? 0,
         projects: projectsRes.count ?? 0,
         templates: templatesRes.count ?? 0,
+        mrr: totalMRR,
       },
       planCounts,
+      monthly,
       recentProjects: recentRes.data ?? [],
     };
   });
@@ -133,5 +168,26 @@ export const setUserRole = createServerFn({ method: "POST" })
         .eq("role", data.role);
       if (error) throw new Error(error.message);
     }
+    return { ok: true };
+  });
+
+export const setUserPlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        userId: z.string().uuid(),
+        plan: z.enum(["prata", "bronze", "ouro", "titanium"]),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("profiles")
+      .update({ plan: data.plan })
+      .eq("id", data.userId);
+    if (error) throw new Error(error.message);
     return { ok: true };
   });

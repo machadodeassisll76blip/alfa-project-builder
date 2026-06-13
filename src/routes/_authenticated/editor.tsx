@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Header } from "@/components/Header";
-import { CanvasEditor, computeMetrics, type EditorState } from "@/components/CanvasEditor";
+import { CanvasEditor, computeMetrics, type EditorState, type Shape } from "@/components/CanvasEditor";
 import { AIChat } from "@/components/AIChat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,13 +11,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Save, Loader2, Box, AlertCircle } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Save, Loader2, Box, FileText, Sparkles } from "lucide-react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { planAllows, type PlanTier } from "@/lib/plans";
 import { getMyPlan, getProject, saveProject } from "@/lib/projects.functions";
+import { BUILTIN_TEMPLATES, getBuiltinTemplate } from "@/lib/builtin-templates";
 
-const searchSchema = z.object({ id: z.string().uuid().optional() });
+const searchSchema = z.object({
+  id: z.string().uuid().optional(),
+  tpl: z.string().optional(),
+});
 
 export const Route = createFileRoute("/_authenticated/editor")({
   validateSearch: (s) => searchSchema.parse(s),
@@ -31,7 +36,7 @@ const INITIAL: EditorState = {
 };
 
 function EditorPage() {
-  const { id } = Route.useSearch();
+  const { id, tpl } = Route.useSearch();
   const navigate = useNavigate();
   const fetchPlan = useServerFn(getMyPlan);
   const load = useServerFn(getProject);
@@ -50,6 +55,7 @@ function EditorPage() {
     fetchPlan().then((p) => setPlan((p?.plan ?? "prata") as PlanTier));
   }, [fetchPlan]);
 
+  // Load saved project
   useEffect(() => {
     if (!id) return;
     setLoading(true);
@@ -68,6 +74,20 @@ function EditorPage() {
       })
       .finally(() => setLoading(false));
   }, [id, load]);
+
+  // Load builtin template
+  useEffect(() => {
+    if (!tpl) return;
+    const t = getBuiltinTemplate(tpl);
+    if (!t) return;
+    setName(t.name);
+    setDescription(t.description);
+    setState({
+      shapes: t.shapes.map((s) => ({ ...s, id: crypto.randomUUID() })),
+      visibleLayers: INITIAL.visibleLayers,
+    });
+    toast.success(`Template "${t.name}" carregado!`);
+  }, [tpl]);
 
   const metrics = useMemo(() => computeMetrics(state.shapes), [state.shapes]);
 
@@ -108,6 +128,19 @@ function EditorPage() {
       setSaving(false);
     }
   };
+
+  const applyAIShapes = (shapes: Shape[], mode: "append" | "replace") => {
+    setState((s) => ({
+      ...s,
+      shapes: mode === "replace" ? shapes : [...s.shapes, ...shapes],
+    }));
+  };
+
+  const loadTemplate = (id: string) => {
+    navigate({ to: "/editor", search: { tpl: id } });
+  };
+
+  const showTemplateGallery = !projectId && !tpl && state.shapes.length === 0;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -158,8 +191,11 @@ function EditorPage() {
                 </TabsTrigger>
                 <TabsTrigger value="info">Detalhes</TabsTrigger>
               </TabsList>
-              <TabsContent value="2d" className="mt-2 flex-1">
+              <TabsContent value="2d" className="relative mt-2 flex-1">
                 <CanvasEditor plan={plan} value={state} onChange={setState} />
+                {showTemplateGallery && (
+                  <TemplateOverlay onSelect={loadTemplate} onBlank={() => setState({ ...state, shapes: [] })} />
+                )}
               </TabsContent>
               <TabsContent value="3d" className="mt-2 flex-1">
                 <Preview3D shapes={state.shapes} />
@@ -183,11 +219,133 @@ function EditorPage() {
           </div>
 
           <div className="h-[640px] lg:sticky lg:top-20">
-            <AIChat plan={plan} shapes={state.shapes} summary={summary} />
+            <AIChat plan={plan} shapes={state.shapes} summary={summary} onApplyShapes={applyAIShapes} />
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function TemplateOverlay({
+  onSelect,
+  onBlank,
+}: {
+  onSelect: (id: string) => void;
+  onBlank: () => void;
+}) {
+  const [open, setOpen] = useState(true);
+  if (!open) return null;
+  return (
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
+      <Card className="max-h-full w-full max-w-3xl overflow-auto border-accent/30 shadow-xl">
+        <CardContent className="p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/15 text-accent">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="font-display text-xl font-bold">Comece em segundos</h2>
+              <p className="text-sm text-muted-foreground">
+                Escolha um template pronto, peça à IA, ou comece do zero.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {BUILTIN_TEMPLATES.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setOpen(false);
+                  onSelect(t.id);
+                }}
+                className="group flex flex-col rounded-lg border bg-card p-3 text-left transition hover:border-accent hover:shadow-md"
+              >
+                <div className="mb-2">
+                  <TemplateThumb shapes={t.shapes} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold">{t.name}</div>
+                  <Badge variant="outline" className="text-[10px]">
+                    {t.category}
+                  </Badge>
+                </div>
+                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{t.description}</p>
+              </button>
+            ))}
+          </div>
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setOpen(false);
+                onBlank();
+              }}
+            >
+              <FileText className="mr-1.5 h-4 w-4" /> Começar em branco
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function TemplateThumb({ shapes }: { shapes: Shape[] }) {
+  let minX = 0, maxX = 0, minY = 0, maxY = 0;
+  for (const s of shapes) {
+    minX = Math.min(minX, s.x1, s.x2);
+    maxX = Math.max(maxX, s.x1, s.x2);
+    minY = Math.min(minY, s.y1, s.y2);
+    maxY = Math.max(maxY, s.y1, s.y2);
+  }
+  const w = Math.max(1, maxX - minX);
+  const h = Math.max(1, maxY - minY);
+  const COLOR: Record<Shape["type"], string> = {
+    room: "#0EA5E9",
+    wall: "#0F172A",
+    electric: "#F59E0B",
+    network: "#2563EB",
+  };
+  return (
+    <svg
+      viewBox={`${minX - 0.5} ${minY - 0.5} ${w + 1} ${h + 1}`}
+      className="h-24 w-full rounded bg-gradient-to-br from-sky-50 to-slate-50"
+      preserveAspectRatio="xMidYMid meet"
+      style={{ transform: "scaleY(-1)" }}
+    >
+      {shapes.map((s, i) => {
+        if (s.type === "room") {
+          const x = Math.min(s.x1, s.x2);
+          const y = Math.min(s.y1, s.y2);
+          return (
+            <rect
+              key={i}
+              x={x}
+              y={y}
+              width={Math.abs(s.x2 - s.x1)}
+              height={Math.abs(s.y2 - s.y1)}
+              fill={COLOR.room + "33"}
+              stroke={COLOR.room}
+              strokeWidth={0.08}
+            />
+          );
+        }
+        return (
+          <line
+            key={i}
+            x1={s.x1}
+            y1={s.y1}
+            x2={s.x2}
+            y2={s.y2}
+            stroke={COLOR[s.type]}
+            strokeWidth={s.type === "wall" ? 0.18 : 0.1}
+            strokeDasharray={s.type === "electric" || s.type === "network" ? "0.3,0.2" : undefined}
+          />
+        );
+      })}
+    </svg>
   );
 }
 
@@ -226,7 +384,6 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 function Preview3D({ shapes }: { shapes: EditorState["shapes"] }) {
-  // Simple isometric projection of room rectangles + walls
   const ISO_X = (x: number, y: number) => (x - y) * 18;
   const ISO_Y = (x: number, y: number, z = 0) => (x + y) * 9 - z * 22;
   const all = shapes.filter((s) => s.type === "room" || s.type === "wall");
@@ -240,7 +397,6 @@ function Preview3D({ shapes }: { shapes: EditorState["shapes"] }) {
       </div>
     );
   }
-  // Compute bounds
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const s of all) {
     minX = Math.min(minX, s.x1, s.x2);
@@ -248,20 +404,18 @@ function Preview3D({ shapes }: { shapes: EditorState["shapes"] }) {
     minY = Math.min(minY, s.y1, s.y2);
     maxY = Math.max(maxY, s.y1, s.y2);
   }
-  const H = 2.8; // m
+  const H = 2.8;
   return (
-    <div className="flex h-full min-h-[460px] items-center justify-center overflow-hidden rounded-lg border bg-[#F1F7FF] bg-blueprint-grid">
+    <div className="flex h-full min-h-[460px] items-center justify-center overflow-hidden rounded-lg border bg-[#F1F7FF]">
       <svg viewBox="-300 -200 600 500" className="h-full w-full">
-        <g transform="translate(0, 0)">
+        <g>
           {all.map((s) => {
             if (s.type === "room") {
               const x1 = Math.min(s.x1, s.x2) - minX;
               const x2 = Math.max(s.x1, s.x2) - minX;
               const y1 = Math.min(s.y1, s.y2) - minY;
               const y2 = Math.max(s.y1, s.y2) - minY;
-              // Floor
-              const p = (x: number, y: number, z = 0) =>
-                `${ISO_X(x, y)},${ISO_Y(x, y, z)}`;
+              const p = (x: number, y: number, z = 0) => `${ISO_X(x, y)},${ISO_Y(x, y, z)}`;
               const floor = `M${p(x1, y1)} L${p(x2, y1)} L${p(x2, y2)} L${p(x1, y2)} Z`;
               const wall1 = `M${p(x1, y1)} L${p(x2, y1)} L${p(x2, y1, H)} L${p(x1, y1, H)} Z`;
               const wall2 = `M${p(x2, y1)} L${p(x2, y2)} L${p(x2, y2, H)} L${p(x2, y1, H)} Z`;
