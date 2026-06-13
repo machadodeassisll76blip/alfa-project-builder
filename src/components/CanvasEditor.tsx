@@ -314,28 +314,36 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
     setDrag(null);
   };
 
-  const onWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const sx = e.clientX - rect.left;
-    const sy = e.clientY - rect.top;
-    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-    const newZoom = Math.max(0.3, Math.min(4, zoom * factor));
-    const ratio = newZoom / zoom;
-    // Zoom around cursor: keep cursor world-position fixed
-    const newPanX = sx - (sx - pan.x) * ratio;
-    const newPanY = pan.y + (size.h - sy) * (1 - ratio) * -1 + (size.h - sy) * (1 - ratio);
-    // Simpler accurate version
-    const worldX = (sx - ORIGIN_X) / SCALE;
-    const worldY = (ORIGIN_Y_FROM_TOP - sy) / SCALE;
-    const newScale = BASE_SCALE * newZoom;
-    const newOriginX = sx - worldX * newScale;
-    const newOriginYFromTop = sy + worldY * newScale;
-    const newPanYFinal = size.h - newOriginYFromTop;
-    setZoom(newZoom);
-    setPan({ x: newOriginX, y: newPanYFinal });
-    void newPanX; void newPanY;
-  };
+  // Native non-passive wheel listener so preventDefault works
+  useEffect(() => {
+    const cvs = canvasRef.current;
+    if (!cvs) return;
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = cvs.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      setZoom((prevZoom) => {
+        const newZoom = Math.max(0.3, Math.min(4, prevZoom * factor));
+        const curScale = BASE_SCALE * prevZoom;
+        setPan((prevPan) => {
+          const curOriginX = prevPan.x;
+          const curOriginYFromTop = size.h - prevPan.y;
+          const worldX = (sx - curOriginX) / curScale;
+          const worldY = (curOriginYFromTop - sy) / curScale;
+          const newScale = BASE_SCALE * newZoom;
+          const newOriginX = sx - worldX * newScale;
+          const newOriginYFromTop = sy + worldY * newScale;
+          return { x: newOriginX, y: size.h - newOriginYFromTop };
+        });
+        return newZoom;
+      });
+    };
+    cvs.addEventListener("wheel", handler, { passive: false });
+    return () => cvs.removeEventListener("wheel", handler);
+  }, [size.h]);
+
 
   const toggleLayer = (k: LayerKey) =>
     onChange({ ...value, visibleLayers: { ...value.visibleLayers, [k]: !value.visibleLayers[k] } });
