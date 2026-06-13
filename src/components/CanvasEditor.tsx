@@ -428,7 +428,6 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
             setDrag(null);
             setPanDrag(null);
           }}
-          onWheel={onWheel}
           onContextMenu={(e) => e.preventDefault()}
           className="block touch-none"
           style={{ cursor }}
