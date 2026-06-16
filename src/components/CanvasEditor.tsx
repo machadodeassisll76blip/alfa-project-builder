@@ -499,11 +499,15 @@ export function computeMetrics(shapes: Shape[]) {
   let roomPerimeter = 0;
   let electricLen = 0;
   let networkLen = 0;
+  let roadLen = 0;
+  let highwayLen = 0;
   for (const s of shapes) {
     const len = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
     if (s.type === "wall") wallLength += len;
     if (s.type === "electric") electricLen += len;
     if (s.type === "network") networkLen += len;
+    if (s.type === "road") roadLen += len;
+    if (s.type === "highway") highwayLen += len;
     if (s.type === "room") {
       const w = Math.abs(s.x2 - s.x1);
       const h = Math.abs(s.y2 - s.y1);
@@ -518,6 +522,8 @@ export function computeMetrics(shapes: Shape[]) {
   const sandM3 = +(wallAreaM2 * 0.07).toFixed(2);
   const floorArea = roomArea;
   const tiles = Math.ceil(floorArea * 1.1);
+  const asphaltAreaM2 = roadLen * 4 + highwayLen * 7;
+  const asphaltTons = +(asphaltAreaM2 * 0.1 * 2.4).toFixed(2);
   return {
     wallLength: +totalWall.toFixed(2),
     roomArea: +roomArea.toFixed(2),
@@ -529,5 +535,9 @@ export function computeMetrics(shapes: Shape[]) {
     tiles,
     electricLen: +electricLen.toFixed(2),
     networkLen: +networkLen.toFixed(2),
+    roadLen: +roadLen.toFixed(2),
+    highwayLen: +highwayLen.toFixed(2),
+    asphaltAreaM2: +asphaltAreaM2.toFixed(2),
+    asphaltTons,
   };
 }
