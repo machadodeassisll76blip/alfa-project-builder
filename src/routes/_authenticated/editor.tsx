@@ -378,6 +378,14 @@ function MetricsBar({
           <Stat label="Rede" value={`${metrics.networkLen} m`} />
         </>
       )}
+      {(metrics.roadLen > 0 || metrics.highwayLen > 0) && (
+        <>
+          <Stat label="Ruas" value={`${metrics.roadLen} m`} />
+          <Stat label="Rodovias" value={`${metrics.highwayLen} m`} />
+          <Stat label="Asfalto" value={`${metrics.asphaltAreaM2} m²`} />
+          <Stat label="Massa asfáltica" value={`${metrics.asphaltTons} t`} />
+        </>
+      )}
     </div>
   );
 }
