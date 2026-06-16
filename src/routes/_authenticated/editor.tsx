@@ -394,13 +394,30 @@ function Stat({ label, value }: { label: string; value: string }) {
 function Preview3D({ shapes }: { shapes: EditorState["shapes"] }) {
   const ISO_X = (x: number, y: number) => (x - y) * 18;
   const ISO_Y = (x: number, y: number, z = 0) => (x + y) * 9 - z * 22;
-  const all = shapes.filter((s) => s.type === "room" || s.type === "wall");
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [drag, setDrag] = useState<{ sx: number; sy: number; px: number; py: number } | null>(null);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      setZoom((z) => Math.max(0.2, Math.min(6, z * factor)));
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, []);
+
+  const all = shapes.filter((s) => s.type === "room" || s.type === "wall" || s.type === "road" || s.type === "highway");
   if (all.length === 0) {
     return (
       <div className="flex h-full min-h-[460px] items-center justify-center rounded-lg border bg-card text-sm text-muted-foreground">
         <div className="text-center">
           <Box className="mx-auto h-10 w-10 opacity-40" />
-          <p className="mt-2">Desenhe paredes ou cômodos no 2D para ver o 3D.</p>
+          <p className="mt-2">Desenhe paredes, cômodos ou rodovias no 2D para ver o 3D.</p>
         </div>
       </div>
     );
@@ -413,11 +430,50 @@ function Preview3D({ shapes }: { shapes: EditorState["shapes"] }) {
     maxY = Math.max(maxY, s.y1, s.y2);
   }
   const H = 2.8;
+  const vbW = 600 / zoom;
+  const vbH = 500 / zoom;
+  const vbX = -300 / zoom - pan.x / zoom;
+  const vbY = -200 / zoom - pan.y / zoom;
   return (
-    <div className="flex h-full min-h-[460px] items-center justify-center overflow-hidden rounded-lg border bg-[#F1F7FF]">
-      <svg viewBox="-300 -200 600 500" className="h-full w-full">
+    <div
+      ref={wrapRef}
+      className="relative flex h-full min-h-[460px] items-center justify-center overflow-hidden rounded-lg border bg-[#F1F7FF]"
+      style={{ cursor: drag ? "grabbing" : "grab" }}
+      onPointerDown={(e) => {
+        setDrag({ sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y });
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        if (!drag) return;
+        setPan({ x: drag.px + (e.clientX - drag.sx), y: drag.py + (e.clientY - drag.sy) });
+      }}
+      onPointerUp={() => setDrag(null)}
+      onPointerLeave={() => setDrag(null)}
+    >
+      <svg viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`} className="h-full w-full touch-none select-none">
         <g>
           {all.map((s) => {
+            if (s.type === "road" || s.type === "highway") {
+              const x1 = s.x1 - minX, y1 = s.y1 - minY, x2 = s.x2 - minX, y2 = s.y2 - minY;
+              const w = s.type === "highway" ? 7 : 4;
+              const dx = x2 - x1, dy = y2 - y1;
+              const len = Math.hypot(dx, dy) || 1;
+              const nx = -dy / len * (w / 2);
+              const ny = dx / len * (w / 2);
+              const p = (x: number, y: number) => `${ISO_X(x, y)},${ISO_Y(x, y)}`;
+              const surface = `M${p(x1 + nx, y1 + ny)} L${p(x2 + nx, y2 + ny)} L${p(x2 - nx, y2 - ny)} L${p(x1 - nx, y1 - ny)} Z`;
+              return (
+                <g key={s.id}>
+                  <path d={surface} fill={s.type === "highway" ? "#111827" : "#374151"} stroke="#0F172A" strokeWidth="0.5" />
+                  <line
+                    x1={ISO_X(x1, y1)} y1={ISO_Y(x1, y1)}
+                    x2={ISO_X(x2, y2)} y2={ISO_Y(x2, y2)}
+                    stroke="#FACC15" strokeWidth="1"
+                    strokeDasharray={s.type === "road" ? "6,4" : undefined}
+                  />
+                </g>
+              );
+            }
             if (s.type === "room") {
               const x1 = Math.min(s.x1, s.x2) - minX;
               const x2 = Math.max(s.x1, s.x2) - minX;
@@ -449,6 +505,225 @@ function Preview3D({ shapes }: { shapes: EditorState["shapes"] }) {
           })}
         </g>
       </svg>
+      <div className="absolute right-2 top-2 flex gap-1 rounded-md border bg-background/90 p-1 backdrop-blur">
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setZoom((z) => Math.max(0.2, z / 1.2))} title="Diminuir zoom">
+          <ZoomOut className="h-3.5 w-3.5" />
+        </Button>
+        <span className="self-center px-1 font-mono text-[10px]">{Math.round(zoom * 100)}%</span>
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setZoom((z) => Math.min(6, z * 1.2))} title="Aumentar zoom">
+          <ZoomIn className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} title="Resetar vista">
+          <Maximize2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-background/80 px-2 py-1 text-[10px] text-muted-foreground backdrop-blur">
+        Scroll = zoom · Arraste = mover
+      </div>
+    </div>
+  );
+}
+
+const ANALYZE_SHAPE_RE = /```alfa-shapes\s*([\s\S]*?)```/g;
+
+function AnalyzePanel({
+  onApplyShapes,
+}: {
+  onApplyShapes: (shapes: Shape[], mode: "append" | "replace") => void;
+}) {
+  const analyze = useServerFn(analyzePlanFile);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [instructions, setInstructions] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  const pick = (f: File | null) => {
+    setFile(f);
+    setResult(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    if (f && f.type.startsWith("image/")) setPreviewUrl(URL.createObjectURL(f));
+    else setPreviewUrl(null);
+  };
+
+  const submit = async () => {
+    if (!file) {
+      toast.error("Escolha uma imagem ou PDF da planta");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("Arquivo muito grande (máx. 8 MB)");
+      return;
+    }
+    setLoading(true);
+    setResult(null);
+    try {
+      const buf = await file.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const dataBase64 = btoa(binary);
+      const res = await analyze({
+        data: {
+          filename: file.name,
+          mime: file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg"),
+          dataBase64,
+          instructions: instructions.trim() || undefined,
+        },
+      });
+      setResult(res.text);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Falha ao analisar");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const blocks = useMemo(() => {
+    if (!result) return [] as { shapes: Shape[] }[];
+    const out: { shapes: Shape[] }[] = [];
+    const re = new RegExp(ANALYZE_SHAPE_RE);
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(result)) !== null) {
+      try {
+        const arr = JSON.parse(m[1].trim());
+        if (Array.isArray(arr)) {
+          const shapes: Shape[] = arr
+            .filter(
+              (s) =>
+                s && typeof s === "object" &&
+                ["wall", "room", "electric", "network", "road", "highway"].includes(s.type) &&
+                [s.x1, s.y1, s.x2, s.y2].every((n: unknown) => typeof n === "number"),
+            )
+            .map((s) => ({
+              id: crypto.randomUUID(),
+              type: s.type,
+              x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2,
+            }));
+          if (shapes.length) out.push({ shapes });
+        }
+      } catch { /* ignore */ }
+    }
+    return out;
+  }, [result]);
+
+  const cleanText = useMemo(() => result?.replace(ANALYZE_SHAPE_RE, "\n_(✨ formas reconstruídas — veja botões abaixo)_\n") ?? "", [result]);
+
+  return (
+    <div className="flex h-full min-h-[460px] flex-col gap-3 rounded-lg border bg-card p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" size="sm" onClick={() => cameraRef.current?.click()}>
+          <Camera className="mr-1.5 h-4 w-4" /> Câmera
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+          <Upload className="mr-1.5 h-4 w-4" /> Imagem / PDF
+        </Button>
+        <input
+          ref={cameraRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => pick(e.target.files?.[0] ?? null)}
+        />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,application/pdf"
+          className="hidden"
+          onChange={(e) => pick(e.target.files?.[0] ?? null)}
+        />
+        {file && (
+          <Badge variant="outline" className="max-w-[220px] truncate">
+            {file.name} · {(file.size / 1024).toFixed(0)} KB
+          </Badge>
+        )}
+        <div className="ml-auto" />
+        <Button
+          size="sm"
+          onClick={submit}
+          disabled={loading || !file}
+          className="bg-accent text-accent-foreground hover:bg-accent/90"
+        >
+          {loading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1.5 h-4 w-4" />}
+          Analisar planta
+        </Button>
+      </div>
+
+      <Textarea
+        value={instructions}
+        onChange={(e) => setInstructions(e.target.value)}
+        placeholder='Instruções opcionais — ex.: "foque nos cômodos do andar térreo" ou "estime as dimensões em metros"'
+        rows={2}
+        className="text-sm"
+      />
+
+      <div className="grid flex-1 gap-3 overflow-hidden md:grid-cols-2">
+        <div className="flex min-h-[240px] items-center justify-center overflow-hidden rounded-md border bg-muted/30">
+          {previewUrl ? (
+            <img src={previewUrl} alt="Pré-visualização da planta" className="max-h-full max-w-full object-contain" />
+          ) : file ? (
+            <div className="text-center text-sm text-muted-foreground">
+              <FileText className="mx-auto h-10 w-10 opacity-40" />
+              <p className="mt-2">{file.name}</p>
+            </div>
+          ) : (
+            <div className="text-center text-sm text-muted-foreground">
+              <Camera className="mx-auto h-10 w-10 opacity-40" />
+              <p className="mt-2">Tire uma foto ou envie um PDF da planta para análise.</p>
+            </div>
+          )}
+        </div>
+        <div className="flex min-h-[240px] flex-col overflow-hidden rounded-md border">
+          <div className="border-b bg-muted/50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Análise da IA
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 text-sm">
+            {loading && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Analisando planta...
+              </div>
+            )}
+            {!loading && !result && (
+              <p className="text-muted-foreground">A análise aparecerá aqui.</p>
+            )}
+            {result && (
+              <>
+                <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2">
+                  <ReactMarkdown>{cleanText}</ReactMarkdown>
+                </div>
+                {blocks.map((b, i) => (
+                  <div key={i} className="mt-2 flex flex-wrap gap-1.5">
+                    <Button
+                      size="sm"
+                      className="h-7 bg-accent text-accent-foreground hover:bg-accent/90"
+                      onClick={() => {
+                        onApplyShapes(b.shapes, "append");
+                        toast.success(`${b.shapes.length} formas adicionadas ao plano`);
+                      }}
+                    >
+                      <Wand2 className="mr-1 h-3 w-3" /> Aplicar ({b.shapes.length})
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7"
+                      onClick={() => {
+                        onApplyShapes(b.shapes, "replace");
+                        toast.success("Plano substituído pela reconstrução");
+                      }}
+                    >
+                      Substituir tudo
+                    </Button>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
