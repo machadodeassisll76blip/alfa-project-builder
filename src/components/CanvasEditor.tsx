@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  MousePointer2,
   Square,
   Minus,
   Zap,
@@ -15,21 +14,23 @@ import {
   ZoomOut,
   Maximize2,
   Hand,
+  Route as RouteIcon,
+  Milestone,
 } from "lucide-react";
 import { planAllows, type PlanTier } from "@/lib/plans";
 
 export type Shape = {
   id: string;
-  type: "wall" | "room" | "electric" | "network";
+  type: "wall" | "room" | "electric" | "network" | "road" | "highway";
   x1: number;
   y1: number;
   x2: number;
   y2: number;
 };
 
-export type LayerKey = "base" | "electric" | "network";
+export type LayerKey = "base" | "electric" | "network" | "roads";
 
-type Tool = "select" | "wall" | "room" | "electric" | "network" | "erase";
+type Tool = "select" | "wall" | "room" | "electric" | "network" | "road" | "highway" | "erase";
 
 const BASE_SCALE = 40; // pixels per meter at zoom 1
 const SNAP = 0.25;
@@ -39,6 +40,8 @@ const LAYER_OF: Record<Shape["type"], LayerKey> = {
   room: "base",
   electric: "electric",
   network: "network",
+  road: "roads",
+  highway: "roads",
 };
 
 const COLORS: Record<Shape["type"], string> = {
@@ -46,6 +49,8 @@ const COLORS: Record<Shape["type"], string> = {
   room: "#0EA5E9",
   electric: "#F59E0B",
   network: "#2563EB",
+  road: "#475569",
+  highway: "#1F2937",
 };
 
 export type EditorState = {
