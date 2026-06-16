@@ -307,6 +307,8 @@ function TemplateThumb({ shapes }: { shapes: Shape[] }) {
     wall: "#0F172A",
     electric: "#F59E0B",
     network: "#2563EB",
+    road: "#475569",
+    highway: "#1F2937",
   };
   return (
     <svg
