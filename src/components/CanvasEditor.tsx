@@ -434,11 +434,11 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
         <div className="mx-2 h-6 w-px bg-border" />
         <div className="flex items-center gap-1">
           <span className="mr-1 text-xs font-medium text-muted-foreground">Camadas:</span>
-          {(["base", "electric", "network"] as LayerKey[]).map((k) => (
+          {(["base", "electric", "network", "roads"] as LayerKey[]).map((k) => (
             <Button key={k} size="sm" variant="ghost" className="h-8" onClick={() => toggleLayer(k)}>
               {value.visibleLayers[k] ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4 opacity-50" />}
               <span className="ml-1 text-xs">
-                {k === "base" ? "Estrutura" : k === "electric" ? "Elétrica" : "Rede"}
+                {k === "base" ? "Estrutura" : k === "electric" ? "Elétrica" : k === "network" ? "Rede" : "Vias"}
               </span>
             </Button>
           ))}
