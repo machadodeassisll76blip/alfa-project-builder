@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import ReactMarkdown from "react-markdown";
 import { Header } from "@/components/Header";
 import { CanvasEditor, computeMetrics, type EditorState, type Shape } from "@/components/CanvasEditor";
 import { AIChat } from "@/components/AIChat";
@@ -12,12 +13,13 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Save, Loader2, Box, FileText, Sparkles } from "lucide-react";
+import { Save, Loader2, Box, FileText, Sparkles, Camera, Upload, Wand2, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { planAllows, type PlanTier } from "@/lib/plans";
 import { getMyPlan, getProject, saveProject } from "@/lib/projects.functions";
 import { BUILTIN_TEMPLATES, getBuiltinTemplate } from "@/lib/builtin-templates";
+import { analyzePlanFile } from "@/lib/vision.functions";
 
 const searchSchema = z.object({
   id: z.string().uuid().optional(),
