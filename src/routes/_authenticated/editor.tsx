@@ -189,6 +189,7 @@ function EditorPage() {
                 <TabsTrigger value="3d" disabled={!planAllows.ai3D(plan)}>
                   3D {!planAllows.ai3D(plan) && <Badge variant="outline" className="ml-2 text-[10px]">Bronze+</Badge>}
                 </TabsTrigger>
+                <TabsTrigger value="analisar">Câmera / PDF</TabsTrigger>
                 <TabsTrigger value="info">Detalhes</TabsTrigger>
               </TabsList>
               <TabsContent value="2d" className="relative mt-2 flex-1">
@@ -199,6 +200,9 @@ function EditorPage() {
               </TabsContent>
               <TabsContent value="3d" className="mt-2 flex-1">
                 <Preview3D shapes={state.shapes} />
+              </TabsContent>
+              <TabsContent value="analisar" className="mt-2 flex-1">
+                <AnalyzePanel onApplyShapes={applyAIShapes} />
               </TabsContent>
               <TabsContent value="info" className="mt-2">
                 <div className="space-y-3 rounded-lg border bg-card p-4">
