@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  MousePointer2,
   Square,
   Minus,
   Zap,
@@ -15,21 +14,23 @@ import {
   ZoomOut,
   Maximize2,
   Hand,
+  Route as RouteIcon,
+  Milestone,
 } from "lucide-react";
 import { planAllows, type PlanTier } from "@/lib/plans";
 
 export type Shape = {
   id: string;
-  type: "wall" | "room" | "electric" | "network";
+  type: "wall" | "room" | "electric" | "network" | "road" | "highway";
   x1: number;
   y1: number;
   x2: number;
   y2: number;
 };
 
-export type LayerKey = "base" | "electric" | "network";
+export type LayerKey = "base" | "electric" | "network" | "roads";
 
-type Tool = "select" | "wall" | "room" | "electric" | "network" | "erase";
+type Tool = "select" | "wall" | "room" | "electric" | "network" | "road" | "highway" | "erase";
 
 const BASE_SCALE = 40; // pixels per meter at zoom 1
 const SNAP = 0.25;
@@ -39,6 +40,8 @@ const LAYER_OF: Record<Shape["type"], LayerKey> = {
   room: "base",
   electric: "electric",
   network: "network",
+  road: "roads",
+  highway: "roads",
 };
 
 const COLORS: Record<Shape["type"], string> = {
@@ -46,6 +49,8 @@ const COLORS: Record<Shape["type"], string> = {
   room: "#0EA5E9",
   electric: "#F59E0B",
   network: "#2563EB",
+  road: "#475569",
+  highway: "#1F2937",
 };
 
 export type EditorState = {
@@ -177,6 +182,42 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
         const h = Math.abs(p2.y - p1.y);
         ctx.fillRect(x, y, w, h);
         ctx.strokeRect(x, y, w, h);
+      } else if (s.type === "road" || s.type === "highway") {
+        // Asphalt body (thick) with yellow center stripe (dashed for road, solid for highway)
+        const widthM = s.type === "highway" ? 7 : 4; // meters of asphalt width
+        const px = widthM * SCALE;
+        ctx.lineCap = "round";
+        ctx.lineWidth = px;
+        ctx.strokeStyle = s.type === "highway" ? "#111827" : "#374151";
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        // Shoulder edges
+        ctx.lineWidth = Math.max(1, px * 0.06);
+        ctx.strokeStyle = "#F1F5F9";
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len;
+        const ny = dx / len;
+        const off = px / 2 - ctx.lineWidth;
+        for (const sgn of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(p1.x + nx * off * sgn, p1.y + ny * off * sgn);
+          ctx.lineTo(p2.x + nx * off * sgn, p2.y + ny * off * sgn);
+          ctx.stroke();
+        }
+        // Center stripe
+        ctx.strokeStyle = "#FACC15";
+        ctx.lineWidth = Math.max(1, px * 0.05);
+        if (s.type === "road") ctx.setLineDash([10, 8]);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.lineCap = "butt";
       } else {
         ctx.lineWidth = s.type === "wall" ? 4 : 2;
         if (s.type === "electric" || s.type === "network") {
@@ -359,6 +400,8 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
     { id: "room", label: "Cômodo", icon: <Square className="h-4 w-4" /> },
     { id: "electric", label: "Elétrica", icon: <Zap className="h-4 w-4" />, locked: !allowsLayers },
     { id: "network", label: "Rede", icon: <Network className="h-4 w-4" />, locked: !allowsLayers },
+    { id: "road", label: "Rua", icon: <RouteIcon className="h-4 w-4" /> },
+    { id: "highway", label: "Rodovia/BR", icon: <Milestone className="h-4 w-4" /> },
     { id: "erase", label: "Borracha", icon: <Eraser className="h-4 w-4" /> },
   ];
 
@@ -391,11 +434,11 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
         <div className="mx-2 h-6 w-px bg-border" />
         <div className="flex items-center gap-1">
           <span className="mr-1 text-xs font-medium text-muted-foreground">Camadas:</span>
-          {(["base", "electric", "network"] as LayerKey[]).map((k) => (
+          {(["base", "electric", "network", "roads"] as LayerKey[]).map((k) => (
             <Button key={k} size="sm" variant="ghost" className="h-8" onClick={() => toggleLayer(k)}>
               {value.visibleLayers[k] ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4 opacity-50" />}
               <span className="ml-1 text-xs">
-                {k === "base" ? "Estrutura" : k === "electric" ? "Elétrica" : "Rede"}
+                {k === "base" ? "Estrutura" : k === "electric" ? "Elétrica" : k === "network" ? "Rede" : "Vias"}
               </span>
             </Button>
           ))}
@@ -456,11 +499,15 @@ export function computeMetrics(shapes: Shape[]) {
   let roomPerimeter = 0;
   let electricLen = 0;
   let networkLen = 0;
+  let roadLen = 0;
+  let highwayLen = 0;
   for (const s of shapes) {
     const len = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
     if (s.type === "wall") wallLength += len;
     if (s.type === "electric") electricLen += len;
     if (s.type === "network") networkLen += len;
+    if (s.type === "road") roadLen += len;
+    if (s.type === "highway") highwayLen += len;
     if (s.type === "room") {
       const w = Math.abs(s.x2 - s.x1);
       const h = Math.abs(s.y2 - s.y1);
@@ -475,6 +522,8 @@ export function computeMetrics(shapes: Shape[]) {
   const sandM3 = +(wallAreaM2 * 0.07).toFixed(2);
   const floorArea = roomArea;
   const tiles = Math.ceil(floorArea * 1.1);
+  const asphaltAreaM2 = roadLen * 4 + highwayLen * 7;
+  const asphaltTons = +(asphaltAreaM2 * 0.1 * 2.4).toFixed(2);
   return {
     wallLength: +totalWall.toFixed(2),
     roomArea: +roomArea.toFixed(2),
@@ -486,5 +535,9 @@ export function computeMetrics(shapes: Shape[]) {
     tiles,
     electricLen: +electricLen.toFixed(2),
     networkLen: +networkLen.toFixed(2),
+    roadLen: +roadLen.toFixed(2),
+    highwayLen: +highwayLen.toFixed(2),
+    asphaltAreaM2: +asphaltAreaM2.toFixed(2),
+    asphaltTons,
   };
 }

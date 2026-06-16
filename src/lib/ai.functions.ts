@@ -43,7 +43,7 @@ Quando o usuário pedir um esboço, planta, cômodo, parede, instalação elétr
 \`\`\`
 
 Regras:
-- \`type\`: "room" (cômodo retangular), "wall" (parede), "electric" (fiação), "network" (rede/dados)
+- \`type\`: "room" (cômodo retangular), "wall" (parede), "electric" (fiação), "network" (rede/dados), "road" (rua/asfalto, ~4m largura), "highway" (rodovia/BR, ~7m largura)
 - Coordenadas em **metros**, origem (0,0) no canto inferior esquerdo
 - Use snap de 0.25m (ex.: 0, 0.5, 1, 1.5, 4)
 - Mantenha cômodos sem se sobrepor; paredes internas separam ambientes
