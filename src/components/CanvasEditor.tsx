@@ -182,6 +182,42 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
         const h = Math.abs(p2.y - p1.y);
         ctx.fillRect(x, y, w, h);
         ctx.strokeRect(x, y, w, h);
+      } else if (s.type === "road" || s.type === "highway") {
+        // Asphalt body (thick) with yellow center stripe (dashed for road, solid for highway)
+        const widthM = s.type === "highway" ? 7 : 4; // meters of asphalt width
+        const px = widthM * SCALE;
+        ctx.lineCap = "round";
+        ctx.lineWidth = px;
+        ctx.strokeStyle = s.type === "highway" ? "#111827" : "#374151";
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        // Shoulder edges
+        ctx.lineWidth = Math.max(1, px * 0.06);
+        ctx.strokeStyle = "#F1F5F9";
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len;
+        const ny = dx / len;
+        const off = px / 2 - ctx.lineWidth;
+        for (const sgn of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(p1.x + nx * off * sgn, p1.y + ny * off * sgn);
+          ctx.lineTo(p2.x + nx * off * sgn, p2.y + ny * off * sgn);
+          ctx.stroke();
+        }
+        // Center stripe
+        ctx.strokeStyle = "#FACC15";
+        ctx.lineWidth = Math.max(1, px * 0.05);
+        if (s.type === "road") ctx.setLineDash([10, 8]);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.lineCap = "butt";
       } else {
         ctx.lineWidth = s.type === "wall" ? 4 : 2;
         if (s.type === "electric" || s.type === "network") {
