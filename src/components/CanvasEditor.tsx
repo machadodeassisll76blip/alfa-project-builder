@@ -400,6 +400,8 @@ export function CanvasEditor({ plan, value, onChange }: Props) {
     { id: "room", label: "Cômodo", icon: <Square className="h-4 w-4" /> },
     { id: "electric", label: "Elétrica", icon: <Zap className="h-4 w-4" />, locked: !allowsLayers },
     { id: "network", label: "Rede", icon: <Network className="h-4 w-4" />, locked: !allowsLayers },
+    { id: "road", label: "Rua", icon: <RouteIcon className="h-4 w-4" /> },
+    { id: "highway", label: "Rodovia/BR", icon: <Milestone className="h-4 w-4" /> },
     { id: "erase", label: "Borracha", icon: <Eraser className="h-4 w-4" /> },
   ];
 
