@@ -32,7 +32,7 @@ export const Route = createFileRoute("/_authenticated/editor")({
 
 const INITIAL: EditorState = {
   shapes: [],
-  visibleLayers: { base: true, electric: true, network: true },
+  visibleLayers: { base: true, electric: true, network: true, roads: true },
 };
 
 function EditorPage() {
