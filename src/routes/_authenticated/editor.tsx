@@ -69,7 +69,7 @@ function EditorPage() {
         const d = (row.data ?? {}) as Partial<EditorState>;
         setState({
           shapes: Array.isArray(d.shapes) ? d.shapes : [],
-          visibleLayers: d.visibleLayers ?? INITIAL.visibleLayers,
+          visibleLayers: { ...INITIAL.visibleLayers, ...(d.visibleLayers ?? {}) },
         });
       })
       .finally(() => setLoading(false));
